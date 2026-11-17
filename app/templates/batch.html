@@ -1,0 +1,70 @@
+{% extends "base.html" %}{% block content %}
+<div class="kpis"><div class="kpi"><b>身份</b><span>{{ identity.name }} · {{ identity.role }}</span></div><div class="kpi"><b>档案</b><span>{{ archive.source_file }}</span></div><div class="kpi"><b>条目</b><span>{{ archive.archive_count }}</span></div><div class="kpi"><b>已交付</b><span>{{ data.summary.delivered|default(0) }}</span></div><div class="kpi"><b>账目</b><span>{{ data.ledger.entries }} / {{ data.ledger.items }}</span></div></div>
+
+<div class="grid module-7">
+  <section class="panel panel--primary">
+    <div class="panel__head"><h2>实际档案 · 授权视图</h2><span class="panel__meta">档号与行号原样保留</span></div>
+    <div class="panel__body panel__body--scroll">
+      <table class="ledger"><thead><tr><th>档号</th><th>盒号</th><th>题名</th><th>行号</th></tr></thead>
+      <tbody>{% for item in archive.entries %}<tr><td>{{ item.archive_id }}</td><td>{{ item.box_no }}</td><td>{{ item.title }}</td><td class="num">{{ item.source_line }}</td></tr>{% else %}<tr><td colspan="4">当前授权下没有可见档案</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel__head"><h2>按馆授权</h2><span class="panel__meta">授权员</span></div>
+      <div class="panel__body">
+        <form id="grant-form" style="display:grid;gap:8px">
+          <select name="library_id" class="num">{% for lib, name in libraries.items() %}<option value="{{ lib }}">{{ name }}（{{ lib }}）</option>{% endfor %}</select>
+          <select name="archive_ids" class="num" multiple size="4">{% for item in archive.entries %}<option value="{{ item.archive_id }}">{{ item.archive_id }} · {{ item.title }}</option>{% endfor %}</select>
+          <button class="btn btn--primary" type="submit" {% if identity.role != 'curator' %}disabled{% endif %}>授予所选档案</button>
+          <button class="btn" type="button" id="revoke-grant" {% if identity.role != 'curator' %}disabled{% endif %}>收回该馆授权</button>
+          <pre class="result" id="grant-result">等待操作</pre>
+        </form>
+        <table class="ledger"><thead><tr><th>馆</th><th>状态</th><th>版本</th><th>范围</th></tr></thead>
+        <tbody>{% for grant in grants %}<tr><td>{{ grant.library_id }}</td><td>{{ grant.status }}</td><td class="num">{{ grant.version }}</td><td>{{ grant.archive_ids|join(', ') }}</td></tr>{% else %}<tr><td colspan="4">尚无授权</td></tr>{% endfor %}</tbody></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>交付</h2><span class="panel__meta">接收馆</span></div>
+      <div class="panel__body">
+        <form id="delivery-form" style="display:grid;gap:8px">
+          <input class="num" name="idempotency_key" placeholder="幂等键（必填）" value="">
+          <button class="btn btn--primary" type="submit" {% if identity.role != 'library' %}disabled{% endif %}>本馆申请交付</button>
+          <pre class="result" id="delivery-result">等待操作</pre>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="panel" style="margin-top:12px">
+  <div class="panel__head"><h2>交付批次</h2><span class="panel__meta">队列 / 中断 / 恢复</span></div>
+  <div class="panel__body panel__body--scroll">
+    <table class="ledger"><thead><tr><th>交付</th><th>馆</th><th>状态</th><th>进度</th><th>授权版本</th><th>尝试</th><th>动作</th></tr></thead>
+    <tbody>{% for row in data.deliveries %}<tr>
+      <td>{{ row.delivery_id }}</td><td>{{ row.library_id }}</td><td>{{ row.status }}</td>
+      <td class="num">{{ row.progress }}/{{ row.items }}</td><td class="num">{{ row.grant_version }}</td><td class="num">{{ row.attempt }}</td>
+      <td>{% if identity.role == 'library' and row.library_id == identity.library_id %}
+        <button class="btn" data-action="process" data-id="{{ row.delivery_id }}">执行/恢复</button>
+        <button class="btn" data-action="interrupt" data-id="{{ row.delivery_id }}">模拟中断</button>
+        <button class="btn" data-action="ticket" data-id="{{ row.delivery_id }}">签发凭据</button>
+      {% endif %}
+      {% for ticket in tickets[row.delivery_id] %}{% if identity.role == 'library' and ticket.library_id == identity.library_id %}<button class="btn" data-action="download" data-id="{{ ticket.ticket_id }}" {% if ticket.status != 'active' %}disabled{% endif %}>下载 {{ ticket.status }}</button>{% endif %}{% endfor %}
+      <button class="btn" data-action="reproduce" data-id="{{ row.delivery_id }}">审计复现</button></td>
+    </tr>{% else %}<tr><td colspan="7">尚无交付</td></tr>{% endfor %}</tbody></table>
+  </div>
+</section>
+
+<section class="panel" style="margin-top:12px">
+  <div class="panel__head"><h2>审计链</h2><span class="panel__meta">{{ '链完整' if audit.chain.ok else '链损坏 @' ~ audit.chain.broken_at }} · {{ audit.chain.checked }} 条</span></div>
+  <div class="panel__body panel__body--scroll">
+    <table class="ledger"><thead><tr><th>#</th><th>时间</th><th>主体</th><th>动作</th><th>结果</th><th>馆</th><th>交付</th><th>凭据</th><th>摘要</th></tr></thead>
+    <tbody>{% for row in audit.audit %}<tr><td class="num">{{ row.id }}</td><td>{{ row.at }}</td><td>{{ row.actor }}/{{ row.actor_role }}</td><td>{{ row.action }}</td><td>{{ row.outcome }}</td><td>{{ row.library_id or '-' }}</td><td>{{ row.delivery_id or '-' }}</td><td>{{ row.ticket_id or '-' }}</td><td title="{{ row.detail }}">{{ row.detail|truncate(64) }}</td></tr>{% else %}<tr><td colspan="9">尚无审计记录</td></tr>{% endfor %}</tbody></table>
+  </div>
+</section>
+
+<pre class="result" id="batch-output" style="margin-top:12px">等待操作</pre>
+<script src="/static/batch.js"></script>
+{% endblock %}

@@ -5,7 +5,9 @@ services:
     environment:
       DB_PATH: /data/archivecodec.db
       RULE_VERSION: "2026.11"
-    volumes: ["app-data:/data"]
+      AUTH_SECRET: "${AUTH_SECRET:?请在 .env 中设置 AUTH_SECRET}"
+      ARCHIVE_PATH: "${ARCHIVE_PATH:-/archive}"
+    volumes: ["app-data:/data", "./sample_data:/archive:ro"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 5s

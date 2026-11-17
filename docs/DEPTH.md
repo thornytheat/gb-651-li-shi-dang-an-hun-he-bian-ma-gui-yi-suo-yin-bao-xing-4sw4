@@ -14,6 +14,7 @@
 | M4 内容归一 | 运行样例并复核证据 | `/api/content/normalize` / `/content` | `app/modules/m4_content/core.py` `app/modules/m4_content/service.py` | `tests/test_m4_content.py` |
 | M5 索引对账 | 运行样例并复核证据 | `/api/reconcile` / `/reconcile` | `app/modules/m5_reconcile/core.py` `app/modules/m5_reconcile/service.py` | `tests/test_m5_reconcile.py` |
 | M6 批次导出 | 运行样例并复核证据 | `/api/export/evidence.csv` / `/runs` | `app/modules/m6_runs/core.py` `app/modules/m6_runs/service.py` | `tests/test_m6_runs.py` |
+| M7 馆际共享 | 登录后按馆授权、交付、收回、下载与审计复现 | `/api/grants/*` `/api/deliveries/*` `/api/audit` / `/batch` | `app/modules/m7_sharing/service.py` `app/modules/m7_sharing/store.py` `app/auth.py` `app/archive.py` | `tests/test_m7_sharing.py` |
 
         ## 陷阱登记
 
@@ -29,6 +30,11 @@
 | TRAP-09 | 真实边界输入 | 朴素处理会错分 | 保留证据并稳定裁决 | `app/modules/m2_encoding/core.py` | `tests/test_m2_encoding.py::test_trap_2` |
 | TRAP-16 | 真实边界输入 | 朴素处理会错分 | 保留证据并稳定裁决 | `app/modules/m3_fields/core.py` | `tests/test_m3_fields.py::test_trap_2` |
 | TRAP-18 | 真实边界输入 | 朴素处理会错分 | 保留证据并稳定裁决 | `app/modules/m4_content/core.py` | `tests/test_m4_content.py::test_trap_2` |
+| TRAP-19 | 审计员需要按原授权复现，但收回后旧凭据也应失效 | 固定权限越权，按现权限重算抹掉原交付依据 | 交付时冻结 manifest 与授权快照；下载/恢复一律按现行权限判定 | `app/modules/m7_sharing/service.py` | `tests/test_m7_sharing.py::test_reproduction_uses_original_authorization_not_current` `tests/test_m7_sharing.py::test_revoke_voids_old_ticket_but_keeps_downloaded_copy` |
+| TRAP-20 | 伪造身份或换馆请求 | 采信请求体里的 `library_id` | 身份由签名会话确认，馆员固定本馆，跨馆即 403 | `app/auth.py` `app/modules/m7_sharing/handler.py` | `tests/test_m7_sharing.py::test_library_identity_cannot_be_switched_by_request` `tests/test_m7_sharing.py::test_login_required_and_forged_session_rejected` |
+| TRAP-21 | 权限变更与下载并发 | 读到半新半旧状态 | 写事务串行提交，审计链顺序即生效边界 | `app/modules/m7_sharing/store.py` | `tests/test_m7_sharing.py::test_concurrent_revoke_and_download_have_one_boundary` |
+| TRAP-22 | 排队交付中断后恢复 | 恢复时沿用旧权限、重试重复记账 | 恢复与落账前重验权限；按 `delivery_id` 唯一记账 | `app/modules/m7_sharing/service.py` | `tests/test_m7_sharing.py::test_interrupt_then_resume_revalidates_and_records_once` |
+| TRAP-23 | 收回影响其他获授权馆与原档案 | 收回时连带清理共享档案 | 授权按馆隔离，原档案、档号与行号保持原样 | `app/archive.py` `app/modules/m7_sharing/service.py` | `tests/test_m7_sharing.py::test_other_library_keeps_its_access_after_revoke` `tests/test_m7_sharing.py::test_actual_archive_str_ids_and_source_lines` |
 
         ## 对账规则
 
@@ -38,4 +44,4 @@
 
         ## 已知不覆盖
 
-        - 生产系统连接、身份认证和外部密钥不在演示范围内。
+        - 生产系统连接与外部密钥不在演示范围内；身份认证为单服务签名会话，未接外部 IdP。
